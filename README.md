@@ -56,7 +56,73 @@ docker compose up --build
 2. Accept the “Reopen in Container” prompt, or run `Dev Containers: Reopen in Container`.
 3. The container installs dependencies and starts FastAPI on `8000` with auto‑reload. The frontend continues to run via Compose.
 
----
+ ---
+
+## Detailed Setup & Runbook
+
+### A. Local backend iteration (FastAPI)
+1. Create and activate a Python 3.11 virtual environment:
+   ```bash
+   python3.11 -m venv .venv
+   source .venv/bin/activate
+   ```
+2. Install runtime + test dependencies:
+   ```bash
+   pip install -r backend/requirements-dev.txt
+   ```
+3. Launch FastAPI locally:
+   ```bash
+   uvicorn backend.main:app --reload --host 0.0.0.0 --port 8000
+   ```
+   - API live at `http://localhost:8000`; Swagger docs at `/docs`, ReDoc at `/redoc`.
+   - Set `DATABASE_URL` before starting if you prefer Postgres or another SQL backend.
+   - Drop `sam_vit_b_01ec64.pth` into `backend/` or configure `SAM_CHECKPOINT_PATH`; also set `TORCH_HOME` if you plan to cache MiDaS weights offline.
+
+### B. Docker-based demo stack
+1. Build & start backend + frontend together:
+   ```bash
+   docker compose up --build
+   ```
+   - Backend on port `8000`; dashboard on `8080`.
+   - Volumes allow local backend edits; restart required for dependency or model changes.
+2. Seed the baseline dashboard state (payload matches the Demo Playbook example above):
+   ```bash
+   curl -X POST http://localhost:8000/api/demo/seed \
+        -H 'Content-Type: application/json' \
+        -d '{
+              "inventory": [
+                {"material": "Super Strength 2", "weight": 950},
+                {"material": "TN Stone", "weight": 620},
+                {"material": "SMS Clay", "weight": 480},
+                {"material": "Minspar", "weight": 810},
+                {"material": "Sandspar", "weight": 585},
+                {"material": "Feldspar", "weight": 720},
+                {"material": "LR28", "weight": 540}
+              ],
+              "reset_deliveries": true,
+              "reset_history": true
+            }'
+   ```
+3. Start the simulator helper:
+   ```bash
+   curl -X POST http://localhost:8000/api/simulation/demo
+   ```
+   - Stop with `/api/simulation/demo/stop` and poll `/api/simulation/demo/status`.
+
+### C. Data & vision operations
+- Use `backend/load_shipments.py` to import `backend/data/shipments.json` (or another file); it canonicalizes aliases (e.g., `SMS → SMS Clay`, `F1 Feldspar → Feldspar`) before writing deliveries.
+- Update `backend/data/orders.csv` to describe new outbound plans; `/api/orders` and `/api/recommendations` read directly from that CSV.
+- The vision helpers (`segment-anything`, `opencv-python-headless`, `torch`) raise `ImageModelDependencyError` when dependencies are missing, so ensure `sam_vit_b_01ec64.pth` + MiDaS cache are available if you exercise `/api/weight`.
+
+### D. Testing checklist
+1. With `.venv` active:
+   ```bash
+   pytest backend/tests
+   ```
+2. Use `curl` or `httpx` to hit `/api/health`, `/api/materials`, or `/api/orders` for quick verification.
+3. After changing SQL models, restart the backend so `init_db` rebuilds tables and reseeds history.
+
+ ---
 
 ## Demo Playbook
 
@@ -70,10 +136,10 @@ Once containers are running:
               "inventory": [
                 {"material": "Super Strength 2", "weight": 950},
                 {"material": "TN Stone", "weight": 620},
-                {"material": "SMS", "weight": 480},
+                {"material": "SMS Clay", "weight": 480},
                 {"material": "Minspar", "weight": 810},
                 {"material": "Sandspar", "weight": 585},
-                {"material": "F1 Feldspar", "weight": 720},
+                {"material": "Feldspar", "weight": 720},
                 {"material": "LR28", "weight": 540}
               ],
               "reset_deliveries": true,

@@ -35,10 +35,11 @@ DEFAULT_JSON = DATA_DIR / "shipments.json"
 MATERIAL_ALIASES: Dict[str, str] = {
     "minspar 1fg": "Minspar",
     "3 m lr28": "LR28",
+    "3m lr28": "LR28",
     "3m ns 700": "3M NS 700",
-    "sms": "SMS",
-    "sms clay": "SMS",
-    "f1 feldspar": "F1 Feldspar",
+    "sms": "SMS Clay",
+    "sms clay": "SMS Clay",
+    "f1 feldspar": "Feldspar",
 }
 
 

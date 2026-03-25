@@ -1,0 +1,79 @@
+# OS / Editor files
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+*.tmp
+
+# Git
+.git
+.gitignore
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.pkl
+*.pt
+*.pth
+*.egg-info/
+.venv/
+venv/
+env/
+pip-wheel-metadata/
+
+# Node / Frontend
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+dist/
+build/
+.cache/
+coverage/
+.vscode/
+.idea/
+
+# Environment / Secrets
+.env
+.env.*
+*.pem
+*.key
+*.crt
+
+# Databases / Data files
+*.db
+*.sqlite3
+*.csv
+*.tsv
+*.jsonl
+*.zip
+*.tar
+*.gz
+*.bak
+*.h5
+*.npy
+*.npz
+*.pkl
+
+# Logs
+*.log
+
+# Local config files
+docker-compose.override.yml
+*.local
+*.dev
+*.config
+
+# Specific backend junk
+backend/*.pth
+backend/__pycache__/
+backend/.pytest_cache/
+backend/.mypy_cache/
+
+# Cache & temp dirs
+__pycache__/
+*.cache/
+.tmp/
+temp/

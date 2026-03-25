@@ -1585,14 +1585,15 @@ def create_delivery(
 
 
 def _process_bill_of_lading(db: Session, payload: BillOfLading) -> TruckDelivery:
+    material_code = canonical_material_name(payload.material_code).strip()
     material = (
         db.query(Material)
-        .filter(func.lower(Material.type) == payload.material_code.lower())
+        .filter(func.lower(Material.type) == material_code.lower())
         .one_or_none()
     )
     if not material:
         material = Material(
-            type=payload.material_code,
+            type=material_code,
             weight=0.0,
             humidity=0.0,
             density=0.0,
