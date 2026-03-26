@@ -43,6 +43,18 @@ git clone https://github.com/<your-org>/Hackathon.git
 cd Hackathon
 ```
 
+### 1.5 First-time setup checks (recommended)
+Run these commands to confirm Docker is installed and running before you try to boot the stack:
+
+```bash
+docker --version
+docker compose version
+docker info
+```
+
+- If `docker info` fails, start Docker Desktop first, then rerun the command.
+- Keep Docker Desktop running while the app is up.
+
 ### 2. Launch with Docker Compose (preferred)
 ```bash
 docker compose up --build
@@ -50,11 +62,90 @@ docker compose up --build
 - Backend REST API: http://localhost:8000
 - Interactive API docs (Swagger): http://localhost:8000/docs
 - Dashboard: http://localhost:8080
+- The default build skips the heavyweight vision stack so the backend image stays fast to build. If you need `/api/weight`, rebuild with `INSTALL_VISION_DEPS=1 docker compose up --build` and provide the SAM/MiDaS model assets noted below.
 
 ### 3. Work inside a Dev Container (optional)
 1. Open the repo in VS Code.
 2. Accept the “Reopen in Container” prompt, or run `Dev Containers: Reopen in Container`.
-3. The container installs dependencies and starts FastAPI on `8000` with auto‑reload. The frontend continues to run via Compose.
+3. The container installs dependencies with `uv` and starts FastAPI on `8000` with auto‑reload. The frontend continues to run via Compose.
+
+ ---
+
+## Exact Step-By-Step: Run The Full App Locally
+
+Use this checklist if you want a single, copy/paste-friendly sequence.
+
+### Step 1: Open a terminal at project root
+```bash
+cd /path/to/Hackathon
+```
+
+### Step 2: Verify required tools
+```bash
+docker --version
+docker compose version
+```
+
+### Step 3: Build and start services
+```bash
+docker compose up --build
+```
+
+Expected behavior:
+- Compose builds `backend` and `frontend` images.
+- You should eventually see Uvicorn logs for the API and Nginx logs for the frontend.
+- Leave this terminal running while you use the app.
+
+### Step 4: Confirm backend is healthy
+Open a second terminal and run:
+
+```bash
+curl http://localhost:8000/api/health
+```
+
+Expected result: JSON response indicating service is healthy.
+
+### Step 5: Open the UI
+- Dashboard: http://localhost:8080
+- API Docs: http://localhost:8000/docs
+
+### Step 6: Seed demo data (optional, recommended)
+```bash
+curl -X POST http://localhost:8000/api/demo/seed \
+       -H 'Content-Type: application/json' \
+       -d '{
+                "inventory": [
+                   {"material": "Super Strength 2", "weight": 950},
+                   {"material": "TN Stone", "weight": 620},
+                   {"material": "SMS Clay", "weight": 480},
+                   {"material": "Minspar", "weight": 810},
+                   {"material": "Sandspar", "weight": 585},
+                   {"material": "Feldspar", "weight": 720},
+                   {"material": "LR28", "weight": 540}
+                ],
+                "reset_deliveries": true,
+                "reset_history": true
+             }'
+```
+
+### Step 7: Start simulator (optional)
+```bash
+curl -X POST http://localhost:8000/api/simulation/demo
+```
+
+### Step 8: Stop the app when done
+In the terminal running Compose, press `Ctrl+C`, then run:
+
+```bash
+docker compose down
+```
+
+### Step 9: Remove containers/volumes for a totally clean restart (optional)
+```bash
+docker compose down -v
+```
+
+Use this only if you want to reset local persisted state such as cached container volumes.
 
  ---
 
@@ -69,6 +160,11 @@ docker compose up --build
 2. Install runtime + test dependencies:
    ```bash
    pip install -r backend/requirements-dev.txt
+   ```
+   If you need `/api/weight`, also install the optional vision stack:
+   ```bash
+   pip install -r backend/requirements-torch-cpu.txt
+   pip install -r backend/requirements-vision.txt
    ```
 3. Launch FastAPI locally:
    ```bash
@@ -85,6 +181,7 @@ docker compose up --build
    ```
    - Backend on port `8000`; dashboard on `8080`.
    - Volumes allow local backend edits; restart required for dependency or model changes.
+   - To enable `/api/weight` inside Docker, rebuild with `INSTALL_VISION_DEPS=1 docker compose up --build`.
 2. Seed the baseline dashboard state (payload matches the Demo Playbook example above):
    ```bash
    curl -X POST http://localhost:8000/api/demo/seed \
@@ -112,7 +209,7 @@ docker compose up --build
 ### C. Data & vision operations
 - Use `backend/load_shipments.py` to import `backend/data/shipments.json` (or another file); it canonicalizes aliases (e.g., `SMS → SMS Clay`, `F1 Feldspar → Feldspar`) before writing deliveries.
 - Update `backend/data/orders.csv` to describe new outbound plans; `/api/orders` and `/api/recommendations` read directly from that CSV.
-- The vision helpers (`segment-anything`, `opencv-python-headless`, `torch`) raise `ImageModelDependencyError` when dependencies are missing, so ensure `sam_vit_b_01ec64.pth` + MiDaS cache are available if you exercise `/api/weight`.
+- The vision helpers (`segment-anything`, `opencv-python-headless`, `torch`) are optional. Install `backend/requirements-torch-cpu.txt` plus `backend/requirements-vision.txt`, or set `INSTALL_VISION_DEPS=1` for Docker builds, then ensure `sam_vit_b_01ec64.pth` + MiDaS cache are available before exercising `/api/weight`.
 
 ### D. Testing checklist
 1. With `.venv` active:
@@ -213,6 +310,8 @@ source .venv/bin/activate
 pip install -r backend/requirements-dev.txt
 pytest backend/tests
 ```
+
+Install `backend/requirements-torch-cpu.txt` plus `backend/requirements-vision.txt` as well if you want to exercise `/api/weight` during local testing.
 
 The suite provisions an isolated SQLite DB for each run so tests remain deterministic.
 
