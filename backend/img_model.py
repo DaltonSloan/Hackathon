@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 import os
+import shutil
 from typing import List, Optional, Tuple
 
 try:  # Optional heavy dependencies – validated at call sites.
@@ -43,6 +44,34 @@ _MIDAS_TRANSFORM = None
 
 class ImageModelDependencyError(RuntimeError):
     """Raised when optional computer-vision dependencies are unavailable."""
+
+
+def _torch_hub_root() -> str:
+    torch_home = os.environ.get("TORCH_HOME")
+    base_dir = torch_home or os.path.join(os.path.expanduser("~"), ".cache", "torch")
+    return os.path.join(base_dir, "hub")
+
+
+def _clear_midas_cache() -> None:
+    """Remove cached MiDaS artifacts so a corrupted partial download can be retried."""
+    hub_root = _torch_hub_root()
+    for name in (
+        "checkpoints",
+        "intel-isl_MiDaS_master",
+        "rwightman_gen-efficientnet-pytorch_master",
+    ):
+        shutil.rmtree(os.path.join(hub_root, name), ignore_errors=True)
+
+    if not os.path.isdir(hub_root):
+        return
+
+    for entry in os.listdir(hub_root):
+        if entry.endswith(".zip"):
+            zip_path = os.path.join(hub_root, entry)
+            try:
+                os.remove(zip_path)
+            except FileNotFoundError:
+                continue
 
 
 def _load_sam() -> Optional[SamAutomaticMaskGenerator]:
@@ -173,21 +202,35 @@ def _load_midas():
     if _MIDAS_MODEL is not None and _MIDAS_TRANSFORM is not None:
         return _MIDAS_MODEL, _MIDAS_TRANSFORM
 
-    try:
-        _MIDAS_MODEL = torch.hub.load(
+    def _load_midas_assets(force_reload: bool = False):
+        model = torch.hub.load(
             "intel-isl/MiDaS",
             "MiDaS_small",
             trust_repo=True,
+            force_reload=force_reload,
         )
-        _MIDAS_MODEL.eval()
-        transforms = torch.hub.load("intel-isl/MiDaS", "transforms", trust_repo=True)
-        _MIDAS_TRANSFORM = transforms.dpt_transform
+        model.eval()
+        transforms = torch.hub.load(
+            "intel-isl/MiDaS",
+            "transforms",
+            trust_repo=True,
+            force_reload=force_reload,
+        )
+        return model, transforms.dpt_transform
+
+    try:
+        _MIDAS_MODEL, _MIDAS_TRANSFORM = _load_midas_assets()
     except Exception as exc:  # pragma: no cover - depends on local cache availability
-        raise ImageModelDependencyError(
-            "Unable to load MiDaS depth model. Pre-download the weights by running "
-            "'torch.hub.load(\"intel-isl/MiDaS\", \"MiDaS_small\")' in an environment "
-            "with internet access, then mount the cache via TORCH_HOME."
-        ) from exc
+        logger.warning("MiDaS load failed; clearing torch hub cache and retrying once: %s", exc)
+        _clear_midas_cache()
+        try:
+            _MIDAS_MODEL, _MIDAS_TRANSFORM = _load_midas_assets(force_reload=True)
+        except Exception as retry_exc:
+            raise ImageModelDependencyError(
+                "Unable to load MiDaS depth model. Pre-download the weights by running "
+                "'torch.hub.load(\"intel-isl/MiDaS\", \"MiDaS_small\")' in an environment "
+                "with internet access, then mount the cache via TORCH_HOME."
+            ) from retry_exc
 
     return _MIDAS_MODEL, _MIDAS_TRANSFORM
 

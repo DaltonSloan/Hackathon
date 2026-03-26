@@ -5,6 +5,5 @@
         "Portobello",
         "redoc",
         "sessionmaker"
-    ],
-    "python.defaultInterpreterPath": "/usr/local/bin/python"
+    ]
 }

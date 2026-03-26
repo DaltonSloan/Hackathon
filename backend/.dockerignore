@@ -1,1 +1,12 @@
-.git
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.pt
+sam_vit_b_01ec64.pth
+*.egg-info/
+backend/.env
+.venv/
+venv/
+env/
+pip-wheel-metadata/

@@ -1,12 +1,17 @@
 services:
   backend:
-    build: ./backend
+    build:
+      context: ./backend
+      args:
+        INSTALL_VISION_DEPS: ${INSTALL_VISION_DEPS:-0}
     ports:
       - "8000:8000"
     volumes:
       - ./backend:/app
+      - torch-cache:/root/.cache/torch
     environment:
       - PYTHONUNBUFFERED=1
+      - TORCH_HOME=/root/.cache/torch
 
   frontend:
     build: ./frontend
@@ -16,3 +21,6 @@ services:
       - ./frontend:/usr/share/nginx/html:ro
     depends_on:
       - backend
+
+volumes:
+  torch-cache:

@@ -12,25 +12,12 @@ try:  # Allow both package and flat module imports
     from .img_model import ImageModelDependencyError, calc_weight  # type: ignore
 except ImportError:  # pragma: no cover - used in Docker image where modules live flat
     from img_model import ImageModelDependencyError, calc_weight
-import cv2
-import numpy as np
 
 from fastapi import Depends, FastAPI, HTTPException, UploadFile, File, Form
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from sqlalchemy import func
 from sqlalchemy.orm import Session
-
-from reportlab.graphics.charts.barcharts import VerticalBarChart
-from reportlab.graphics.charts.legends import Legend
-from reportlab.graphics.charts.lineplots import LinePlot
-from reportlab.graphics.shapes import Drawing
-from reportlab.graphics.widgets.markers import makeMarker
-from reportlab.lib import colors
-from reportlab.lib.pagesizes import letter
-from reportlab.lib.styles import getSampleStyleSheet
-from reportlab.lib.units import inch
-from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
 
 try:
     from .database import SessionLocal, init_db  # type: ignore
@@ -295,13 +282,13 @@ def _material_alerts(
     return alerts
 
 
-def _material_status(fill_ratio: float) -> Tuple[str, colors.Color]:
+def _material_status(fill_ratio: float) -> Tuple[str, str]:
     """Map a fill ratio to a human-friendly status string and its accent color."""
     if fill_ratio <= REORDER_THRESHOLD_RATIO:
-        return "Critical", colors.HexColor("#dc2626")
+        return "Critical", "#dc2626"
     if fill_ratio <= WARNING_THRESHOLD_RATIO:
-        return "Warning", colors.HexColor("#f97316")
-    return "Healthy", colors.HexColor("#16a34a")
+        return "Warning", "#f97316"
+    return "Healthy", "#16a34a"
 
 
 def _demo_running() -> bool:
@@ -546,6 +533,17 @@ def _build_inventory_report(
     orders_map: Optional[Dict[str, List[OrderRecord]]] = None,
 ) -> BytesIO:
     """Render a PDF snapshot with inventory tables, fill chart, trends, and recommendation outlook."""
+    from reportlab.graphics.charts.barcharts import VerticalBarChart
+    from reportlab.graphics.charts.legends import Legend
+    from reportlab.graphics.charts.lineplots import LinePlot
+    from reportlab.graphics.shapes import Drawing
+    from reportlab.graphics.widgets.markers import makeMarker
+    from reportlab.lib import colors
+    from reportlab.lib.pagesizes import letter
+    from reportlab.lib.styles import getSampleStyleSheet
+    from reportlab.lib.units import inch
+    from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
+
     buffer = BytesIO()
     doc = SimpleDocTemplate(
         buffer,
@@ -569,13 +567,14 @@ def _build_inventory_report(
 
     table_data = [["Material", "Weight (tons)", "Fill %", "Status"]]
     fill_percentages: List[float] = []
-    fill_colors: List[colors.Color] = []
+    fill_colors = []
     material_names: List[str] = []
 
     for material in sorted(materials, key=lambda item: item.type.lower()):
         metrics = _material_metrics(material, db, orders_map)
         fill_pct = round(metrics["fill_ratio"] * 100, 1)
-        status_label, status_color = _material_status(metrics["fill_ratio"])
+        status_label, status_hex = _material_status(metrics["fill_ratio"])
+        status_color = colors.HexColor(status_hex)
         table_data.append(
             [
                 metrics["type"],
@@ -1661,6 +1660,18 @@ MATERIAL_DENSITIES = {
 
 @app.post("/api/weight")
 async def estimate_image_weight(file: UploadFile = File(...), material: str = Form(...)):
+    try:
+        import cv2
+        import numpy as np
+    except ImportError as exc:
+        raise HTTPException(
+            status_code=503,
+            detail=(
+                "Image estimation dependencies are not installed. "
+                "Install the optional vision stack to use /api/weight."
+            ),
+        ) from exc
+
     material_key = material.lower().strip()
     if material_key not in MATERIAL_DENSITIES:
         raise HTTPException(status_code=400, detail=f"Unknown material: {material}")
@@ -1671,7 +1682,7 @@ async def estimate_image_weight(file: UploadFile = File(...), material: str = Fo
     np_arr = np.frombuffer(contents, np.uint8)
     image = cv2.imdecode(np_arr, cv2.IMREAD_COLOR)
     if image is None:
-        return {"error": "Invalid image file"}
+        raise HTTPException(status_code=400, detail="Invalid image file.")
     image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
     try:
         overlay, mass_tons = calc_weight(image, density_lbs_per_gal)

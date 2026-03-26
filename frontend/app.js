@@ -21,6 +21,29 @@ const API_BASE_URL =
     window.API_BASE_URL ||
     `${window.location.protocol}//${window.location.hostname}:${window.location.port === '8080' || !window.location.port ? '8000' : window.location.port}`;
 
+async function extractErrorMessage(response, fallbackMessage) {
+    const contentType = response.headers.get('content-type') || '';
+
+    try {
+        if (contentType.includes('application/json')) {
+            const payload = await response.json();
+            const detail = payload?.detail || payload?.error;
+            if (detail) {
+                return String(detail);
+            }
+        }
+
+        const text = await response.text();
+        if (text) {
+            return text;
+        }
+    } catch (error) {
+        console.debug('Unable to parse error response:', error);
+    }
+
+    return fallbackMessage;
+}
+
 function formatDisplayDateTime(isoString) {
     if (!isoString) {
         return '—';
@@ -584,6 +607,8 @@ async function analyzeImage() {
     const resultNumber = document.getElementById('resultNumber');
     const resultDetails = document.getElementById('resultDetails');
     const materialSelect = document.getElementById('materialSelect');
+    const uploadedImage = document.getElementById('uploadedImage');
+    let previewUrl = '';
 
 
 
@@ -600,27 +625,41 @@ async function analyzeImage() {
         loadingSection.hidden = false;
     }
 
+    if (uploadedImage) {
+        previewUrl = URL.createObjectURL(uploadedFile);
+        uploadedImage.src = previewUrl;
+    }
+
     try {
         const formData = new FormData();
         formData.append('file', uploadedFile);
         formData.append('material', materialSelect.value);
 
-        const response = await fetch('http://localhost:8000/api/weight', {
+        const response = await fetch(`${API_BASE_URL}/api/weight`, {
             method: 'POST',
             body: formData,
         });
 
         if (!response.ok) {
-            throw new Error(`Analysis failed (${response.status})`);
+            throw new Error(
+                await extractErrorMessage(
+                    response,
+                    `Image analysis failed (${response.status}).`
+                )
+            );
         }
 
         const massHeader = response.headers.get('X-Mass-Short-Ton');
         const blob = await response.blob();
         const imageUrl = URL.createObjectURL(blob);
 
-        const uploadedImage = document.getElementById('uploadedImage');
         if (uploadedImage) {
             uploadedImage.src = imageUrl;
+        }
+
+        if (previewUrl) {
+            URL.revokeObjectURL(previewUrl);
+            previewUrl = '';
         }
 
         if (resultNumber) {
@@ -631,8 +670,16 @@ async function analyzeImage() {
         }
     } catch (error) {
         console.error('Failed to analyze image:', error);
-        alert('Image analysis failed. Please try again.');
+        if (resultNumber) {
+            resultNumber.textContent = '-- tons';
+        }
+        if (resultDetails) {
+            resultDetails.textContent = error instanceof Error ? error.message : 'Image analysis failed. Please try again.';
+        }
     } finally {
+        if (previewUrl) {
+            URL.revokeObjectURL(previewUrl);
+        }
         if (loadingSection) {
             loadingSection.hidden = true;
         }

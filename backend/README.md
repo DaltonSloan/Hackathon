@@ -11,6 +11,13 @@ pip install -r requirements-dev.txt
 uvicorn main:app --host 0.0.0.0 --port 8000 --reload
 ```
 
+To enable `/api/weight` locally, install the optional vision stack separately:
+
+```bash
+pip install -r requirements-torch-cpu.txt
+pip install -r requirements-vision.txt
+```
+
 Environment variables:
 
 | Variable | Purpose | Default |
